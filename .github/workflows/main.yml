@@ -1,0 +1,80 @@
+# Adapted from https://github.com/ocaml/setup-ocaml?tab=readme-ov-file#example-workflow
+name: Build and Test
+
+on:
+  - push
+  - pull_request
+
+permissions: read-all
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+      - name: Configure git
+        run: |
+          git config --global core.longpaths true
+          # Make checkout speedy
+          git config --global fetch.parallel 50
+          # https://git-scm.com/docs/git-config/2.35.2#Documentation/git-config.txt-safedirectory
+          git config --global --add safe.directory $(pwd)
+          # line endings for Windows
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Checkout tree
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      - name: Build
+        run: opam exec -- make build
+
+      - name: Run core tests
+        # The ./meta-test run in the next step depends on file system state that is
+        # produced by running this test.
+        #
+        # This test is run by one of the skipped tests in `Meta_test.ml` that we
+        # are not able to run on windows because it depends on hardcoded posix paths.
+        run: opam exec -- ./test run -s 'xfail due to invalid output'
+
+      - name: Run tests
+        run: opam exec -- make test
+
+  lint-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v4
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+      - uses: ocaml/setup-ocaml/lint-doc@v3
+
+  lint-opam:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v4
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+      - uses: ocaml/setup-ocaml/lint-opam@v3
